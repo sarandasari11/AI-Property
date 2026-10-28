@@ -289,11 +289,18 @@ with col_left:
         if uploaded_files:
             upload_temp = TEMP_DIR / "uploads"
             upload_temp.mkdir(parents=True, exist_ok=True)
-            for uf in uploaded_files:
-                save_p = upload_temp / uf.name
-                with open(save_p, "wb") as f:
-                    f.write(uf.getbuffer())
-                selected_image_paths.append(str(save_p.resolve()))
+            for idx, uf in enumerate(uploaded_files):
+                safe_name = f"{idx:02d}_{Path(uf.name).name.replace(' ', '_')}"
+                save_p = upload_temp / safe_name
+                try:
+                    with open(save_p, "wb") as f:
+                        f.write(uf.getbuffer())
+                    # Validate that it is a readable image
+                    with Image.open(save_p) as test_img:
+                        test_img.verify()
+                    selected_image_paths.append(str(save_p.resolve()))
+                except Exception as img_err:
+                    st.error(f"Error processing image '{uf.name}': {img_err}")
 
 
 with col_right:
