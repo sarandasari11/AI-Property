@@ -1,0 +1,20 @@
+{
+  "name": "Skyline Azure Penthouse",
+  "location": "Indiranagar, Bengaluru",
+  "price": "₹2.85 Cr",
+  "property_type": "3-BHK Ultra Luxury Penthouse",
+  "features": [
+    "Vastu Compliant with 360-Degree Skyline Views",
+    "Italian Statuario Marble Flooring Throughout",
+    "Private Rooftop Sky Deck & Jacuzzi",
+    "Smart Automation System by Lutron"
+  ],
+  "contact_cta": "Contact Realty Assistant at +91-98765-43210 or visit realtyassistant.in",
+  "image_paths": [
+    "img_1_exterior.jpg",
+    "img_2_living.jpg",
+    "img_3_kitchen.jpg",
+    "img_4_master.jpg",
+    "img_5_terrace.jpg"
+  ]
+}

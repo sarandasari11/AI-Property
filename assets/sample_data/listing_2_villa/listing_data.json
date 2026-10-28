@@ -1,0 +1,19 @@
+{
+  "name": "Villa Solaria Beachfront",
+  "location": "North Goa, India",
+  "price": "₹5.20 Cr",
+  "property_type": "4-BHK Luxury Coastal Villa",
+  "features": [
+    "Direct Private Beachfront Access",
+    "Private 40ft Heated Infinity Pool",
+    "Fully Furnished Designer Tropical Interiors",
+    "High ROI Holiday Rental Potential"
+  ],
+  "contact_cta": "Call VIP Concierge at +91-88888-12345 or visit villasolaria.com",
+  "image_paths": [
+    "img_1_front.jpg",
+    "img_2_pool.jpg",
+    "img_3_lounge.jpg",
+    "img_4_patio.jpg"
+  ]
+}

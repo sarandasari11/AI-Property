@@ -15,6 +15,7 @@ ENV/
 
 # Generated media / temporary build files
 output/*.mp4
+!output/sample_*.mp4
 output/*.mp3
 output/*.wav
 !output/.gitkeep
