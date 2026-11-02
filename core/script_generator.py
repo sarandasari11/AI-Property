@@ -2,7 +2,9 @@
 AI Script & Caption Generation Engine for Real Estate Property Videos.
 
 Features:
-1. Structured Scene breakdown (Intro -> Feature Scenes -> Outro/CTA).
+1. Strict 1:1 image-to-feature scene mapping:
+   - When images match or relate to features (e.g., 5 images: exterior, living, kitchen, bedroom, terrace),
+     each photo gets its own dedicated, synchronized feature narration and label.
 2. Dual generation engine:
    - Modern LLM support (Gemini / OpenAI API) with strict factual grounding.
    - High-quality deterministic rule-based NLP template generator (100% offline, zero-dependency fallback).
@@ -23,7 +25,7 @@ class SceneScript(BaseModel):
     voiceover_text: str = Field(..., description="Spoken narration for this scene")
     caption_title: str = Field(..., description="Primary bold overlay text")
     caption_subtitle: str = Field(..., description="Secondary descriptive overlay text")
-    badge_text: Optional[str] = Field(None, description="Accent pill/tag (e.g., 'FOR SALE', 'FEATURED')")
+    badge_text: Optional[str] = Field(None, description="Accent tag / category pill")
     image_path: str = Field(..., description="Path to corresponding property image")
     estimated_duration: float = Field(..., description="Estimated duration in seconds")
 
@@ -52,44 +54,23 @@ def generate_rule_based_script(prop: PropertyInput) -> PropertyScript:
     """
     High-converting, professional real estate narrative engine.
     Strictly uses ONLY facts supplied in PropertyInput (zero hallucination).
-    Distributes features evenly across available property photos (4 to 8 images).
+    
+    1:1 Mapping Logic:
+    - If len(features) == len(images):
+      Each photo corresponds directly to its specific feature!
+      Photo 0: Intro + Feature 0 (e.g., Exterior)
+      Photo 1..N-2: Dedicated feature per photo
+      Photo N-1: Feature N-1 (e.g., Terrace/View) + Pricing & CTA Outro
+    - If len(features) != len(images):
+      Middle scenes distribute features evenly across photos 1 to N-2.
     """
     images = prop.image_paths
     num_scenes = len(images)
     features = prop.features
-    
-    # Scene 1: Introduction / Hook (Image 0)
-    # Middle Scenes: Features (Images 1 to N-2)
-    # Final Scene: Price & Call to Action (Image N-1)
-    
-    num_feature_scenes = num_scenes - 2
-    
-    # Distribute features across the middle scenes
-    feature_buckets: List[List[str]] = [[] for _ in range(num_feature_scenes)]
-    for idx, feat in enumerate(features):
-        bucket_idx = idx % num_feature_scenes
-        feature_buckets[bucket_idx].append(feat)
+    num_features = len(features)
 
     scenes: List[SceneScript] = []
 
-    # --- 1. INTRO SCENE ---
-    intro_voice = (
-        f"Welcome to {prop.name}, an exceptional {prop.property_type} "
-        f"situated in prime {prop.location}."
-    )
-    intro_scene = SceneScript(
-        scene_index=0,
-        scene_type="intro",
-        voiceover_text=intro_voice,
-        caption_title=prop.name,
-        caption_subtitle=f"{prop.property_type} • {prop.location}",
-        badge_text="EXCLUSIVE LISTING",
-        image_path=images[0],
-        estimated_duration=estimate_speech_duration(intro_voice, min_duration=5.0),
-    )
-    scenes.append(intro_scene)
-
-    # --- 2. FEATURE SCENES ---
     feature_intros = [
         "Step inside to discover",
         "Experience luxurious living with",
@@ -99,49 +80,132 @@ def generate_rule_based_script(prop: PropertyInput) -> PropertyScript:
         "Every corner stands out with",
     ]
 
-    for f_idx in range(num_feature_scenes):
-        assigned_features = feature_buckets[f_idx]
-        img_idx = f_idx + 1
-        intro_phrase = feature_intros[f_idx % len(feature_intros)]
-        
-        if assigned_features:
-            feat_sentence = " and ".join(assigned_features)
-            voice_text = f"{intro_phrase} {feat_sentence}."
-            primary_cap = assigned_features[0].title()
-            secondary_cap = assigned_features[1].title() if len(assigned_features) > 1 else f"Designed for modern living in {prop.location}"
-        else:
-            voice_text = f"Thoughtfully designed with immaculate attention to detail throughout."
-            primary_cap = f"{prop.property_type} Living"
-            secondary_cap = "Premium Quality & Finishes"
-
-        feat_scene = SceneScript(
-            scene_index=img_idx,
-            scene_type="feature",
-            voiceover_text=voice_text,
-            caption_title=primary_cap,
-            caption_subtitle=secondary_cap,
-            badge_text=f"FEATURE {f_idx + 1}",
-            image_path=images[img_idx],
-            estimated_duration=estimate_speech_duration(voice_text, min_duration=4.8),
+    # --- CASE A: Exact 1:1 Match (len(features) == len(images)) ---
+    # Common pattern: Photo 0=Exterior, 1=Living, 2=Kitchen, 3=Bedroom, 4=Terrace
+    if num_features == num_scenes:
+        # Scene 0 (Intro Photo + Feature 0)
+        f0 = features[0]
+        intro_voice = (
+            f"Welcome to {prop.name}, an exceptional {prop.property_type} "
+            f"in prime {prop.location}, featuring {f0}."
         )
-        scenes.append(feat_scene)
+        intro_scene = SceneScript(
+            scene_index=0,
+            scene_type="intro",
+            voiceover_text=intro_voice,
+            caption_title=prop.name,
+            caption_subtitle=f"{f0} • {prop.location}",
+            badge_text="EXCLUSIVE TOUR",
+            image_path=images[0],
+            estimated_duration=estimate_speech_duration(intro_voice, min_duration=5.0),
+        )
+        scenes.append(intro_scene)
 
-    # --- 3. OUTRO / CALL TO ACTION SCENE ---
-    outro_img_idx = num_scenes - 1
-    outro_voice = (
-        f"Offered at {prop.price}. Don't miss this opportunity. {prop.contact_cta}."
-    )
-    outro_scene = SceneScript(
-        scene_index=outro_img_idx,
-        scene_type="outro",
-        voiceover_text=outro_voice,
-        caption_title=f"Offered at {prop.price}",
-        caption_subtitle=prop.contact_cta,
-        badge_text="BOOK A VIEWING",
-        image_path=images[outro_img_idx],
-        estimated_duration=estimate_speech_duration(outro_voice, min_duration=5.0),
-    )
-    scenes.append(outro_scene)
+        # Scenes 1 to N-2 (Middle features, strictly 1 feature per photo)
+        for i in range(1, num_scenes - 1):
+            feat = features[i]
+            intro_phrase = feature_intros[(i - 1) % len(feature_intros)]
+            voice_text = f"{intro_phrase} {feat}."
+            feat_scene = SceneScript(
+                scene_index=i,
+                scene_type="feature",
+                voiceover_text=voice_text,
+                caption_title=feat.title(),
+                caption_subtitle=f"Designed for modern living in {prop.location}",
+                badge_text=f"FEATURE {i}",
+                image_path=images[i],
+                estimated_duration=estimate_speech_duration(voice_text, min_duration=4.8),
+            )
+            scenes.append(feat_scene)
+
+        # Scene N-1 (Last Photo + Last Feature + Outro CTA)
+        last_idx = num_scenes - 1
+        f_last = features[last_idx]
+        outro_voice = (
+            f"Highlights conclude with {f_last}. "
+            f"Offered at {prop.price}. Don't miss this opportunity. {prop.contact_cta}."
+        )
+        outro_scene = SceneScript(
+            scene_index=last_idx,
+            scene_type="outro",
+            voiceover_text=outro_voice,
+            caption_title=f"{f_last.title()} • {prop.price}",
+            caption_subtitle=prop.contact_cta,
+            badge_text="INQUIRE TODAY",
+            image_path=images[last_idx],
+            estimated_duration=estimate_speech_duration(outro_voice, min_duration=5.2),
+        )
+        scenes.append(outro_scene)
+
+    else:
+        # --- CASE B: General distribution across middle photos ---
+        num_feature_scenes = max(1, num_scenes - 2)
+        feature_buckets: List[List[str]] = [[] for _ in range(num_feature_scenes)]
+        for idx, feat in enumerate(features):
+            bucket_idx = idx % num_feature_scenes
+            feature_buckets[bucket_idx].append(feat)
+
+        # Scene 0: Intro
+        intro_voice = (
+            f"Welcome to {prop.name}, an exceptional {prop.property_type} "
+            f"situated in prime {prop.location}."
+        )
+        intro_scene = SceneScript(
+            scene_index=0,
+            scene_type="intro",
+            voiceover_text=intro_voice,
+            caption_title=prop.name,
+            caption_subtitle=f"{prop.property_type} • {prop.location}",
+            badge_text="EXCLUSIVE TOUR",
+            image_path=images[0],
+            estimated_duration=estimate_speech_duration(intro_voice, min_duration=5.0),
+        )
+        scenes.append(intro_scene)
+
+        # Middle Scenes
+        for f_idx in range(num_feature_scenes):
+            assigned_features = feature_buckets[f_idx]
+            img_idx = f_idx + 1
+            intro_phrase = feature_intros[f_idx % len(feature_intros)]
+            
+            if assigned_features:
+                feat_sentence = " and ".join(assigned_features)
+                voice_text = f"{intro_phrase} {feat_sentence}."
+                primary_cap = assigned_features[0].title()
+                secondary_cap = assigned_features[1].title() if len(assigned_features) > 1 else f"Designed for modern living in {prop.location}"
+            else:
+                voice_text = "Thoughtfully designed with immaculate attention to detail throughout."
+                primary_cap = f"{prop.property_type} Living"
+                secondary_cap = "Premium Quality & Finishes"
+
+            feat_scene = SceneScript(
+                scene_index=img_idx,
+                scene_type="feature",
+                voiceover_text=voice_text,
+                caption_title=primary_cap,
+                caption_subtitle=secondary_cap,
+                badge_text=f"FEATURE {f_idx + 1}",
+                image_path=images[img_idx],
+                estimated_duration=estimate_speech_duration(voice_text, min_duration=4.8),
+            )
+            scenes.append(feat_scene)
+
+        # Outro Scene
+        outro_img_idx = num_scenes - 1
+        outro_voice = (
+            f"Offered at {prop.price}. Don't miss this opportunity. {prop.contact_cta}."
+        )
+        outro_scene = SceneScript(
+            scene_index=outro_img_idx,
+            scene_type="outro",
+            voiceover_text=outro_voice,
+            caption_title=f"Offered at {prop.price}",
+            caption_subtitle=prop.contact_cta,
+            badge_text="INQUIRE TODAY",
+            image_path=images[outro_img_idx],
+            estimated_duration=estimate_speech_duration(outro_voice, min_duration=5.0),
+        )
+        scenes.append(outro_scene)
 
     full_voiceover = " ".join([s.voiceover_text for s in scenes])
     total_duration = sum([s.estimated_duration for s in scenes])
@@ -171,7 +235,8 @@ def generate_llm_script(prop: PropertyInput, api_key: Optional[str] = None) -> O
         system_instruction = (
             "You are an expert real estate promotional copywriter. Write a concise, 20-35 second video script "
             "divided into scenes. CRITICAL CONSTRAINT: Strictly use ONLY the facts provided. "
-            "Never invent features, square footage, views, or details not supplied in the input."
+            "Never invent features, square footage, views, or details not supplied in the input. "
+            "Ensure every scene corresponds strictly to the supplied photo order and features."
         )
 
         user_content = f"""
@@ -185,7 +250,7 @@ Number of Images (Scenes): {len(prop.image_paths)}
 
 Write exactly {len(prop.image_paths)} scenes.
 Scene 0 must be Intro.
-Scenes 1 to {len(prop.image_paths) - 2} must cover the features.
+Scenes 1 to {len(prop.image_paths) - 2} must cover the features in order.
 Scene {len(prop.image_paths) - 1} must be Outro with Price and CTA.
 
 Format each scene line as:
@@ -207,7 +272,6 @@ SCENE <index> | <VOICEOVER> | <CAPTION_TITLE> | <CAPTION_SUBTITLE>
         lines = [line.strip() for line in generated_text.split("\n") if line.strip().startswith("SCENE")]
         
         if len(lines) != len(prop.image_paths):
-            # If LLM didn't return exact matching count, fall back to rule-based engine
             return None
 
         for idx, line in enumerate(lines):
@@ -228,7 +292,7 @@ SCENE <index> | <VOICEOVER> | <CAPTION_TITLE> | <CAPTION_SUBTITLE>
                 voiceover_text=voice,
                 caption_title=title,
                 caption_subtitle=subtitle,
-                badge_text="EXCLUSIVE" if stype == "intro" else ("CONTACT NOW" if stype == "outro" else f"FEATURE {idx}"),
+                badge_text="EXCLUSIVE TOUR" if stype == "intro" else ("INQUIRE TODAY" if stype == "outro" else f"FEATURE {idx}"),
                 image_path=prop.image_paths[idx],
                 estimated_duration=estimate_speech_duration(voice, min_duration=4.5),
             ))
@@ -244,7 +308,6 @@ SCENE <index> | <VOICEOVER> | <CAPTION_TITLE> | <CAPTION_SUBTITLE>
             engine_used="llm_gemini",
         )
     except Exception:
-        # Graceful fallback to rule-based engine
         return None
 
 
